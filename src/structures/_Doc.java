@@ -28,6 +28,7 @@ public class _Doc {
 	
 	//We only need one representation between dense vector and sparse vector: V-dimensional vector.
 	private _SparseFeature[] m_x_sparse; // sparse representation of features: default value will be zero.
+	private int sentences [][];
 	
 	//Constructor.
 	public _Doc(){
@@ -162,6 +163,27 @@ public class _Doc {
 			count++;
 		}		
 		this.m_x_sparse = tempSparse;
+	}
+
+	//set sentences list
+	// added by Md. Mustafizur Rahman for HTMM Topic Modelling 
+	public void setSentences(int array[][])
+	{
+		this.sentences = array;
+	}
+	
+	// return all the indices of the word in a sentence with given index
+	// added by Md. Mustafizur Rahman for HTMM Topic Modelling 
+	public int [] getSentence(int index)
+	{
+		return this.sentences[index];
+	}
+	
+	// return number of sentences in this Doc
+	// added by Md. Mustafizur Rahman for HTMM Topic Modelling 
+	public int getTotalSenetence()
+	{
+		return this.sentences.length;
 	}
 	
 	//Get the predicted result, which is used for comparison.
