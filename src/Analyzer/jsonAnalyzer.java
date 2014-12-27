@@ -6,8 +6,10 @@ package Analyzer;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 
@@ -41,6 +43,15 @@ public class jsonAnalyzer extends DocAnalyzer{
 	public void LoadDoc(String filename) {
 		try {
 			JSONObject json = LoadJson(filename);
+			
+			/*Post post1 = new Post(json.getJSONObject("ProductInfo"));
+			JSONArray jarray = json.getJSONArray("Reviews");
+		    if(post1.getProductName()!=null)
+			{
+	        	System.out.println(post1.getProductID()+":"+jarray.length()+":"+ post1.getProductName());
+				
+			}*/
+			
 			JSONArray jarray = json.getJSONArray("Reviews");
 			for(int i=0; i<jarray.length(); i++) {
 				Post post = new Post(jarray.getJSONObject(i));
@@ -50,7 +61,7 @@ public class jsonAnalyzer extends DocAnalyzer{
 				}
 			}
 		} catch (Exception e) {
-			System.out.print('X');
+			System.out.print("X");
 		}
 	}
 	
@@ -68,7 +79,7 @@ public class jsonAnalyzer extends DocAnalyzer{
 			reader.close();
 			return new JSONObject(buffer.toString());
 		} catch (Exception e) {
-			System.out.print('X');
+			System.out.print("X");
 			return null;
 		}
 	}

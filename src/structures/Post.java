@@ -19,6 +19,18 @@ public class Post {
 		return m_ID;
 	}
 
+	//unique ProductID from the corresponding website
+	String m_ProductID;
+	public String getProductID() {
+			return m_ProductID;
+		}
+
+	//ProductName from the corresponding website
+		String m_ProductName;
+		public String getProductName() {
+				return m_ProductName;
+			}
+	
 	//author's displayed name
 	String m_author;
 	public String getAuthor() {
@@ -120,8 +132,13 @@ public class Post {
 				m_ID = json.getString("ReviewID");
 			if (json.has("Author"))
 				setAuthor(json.getString("Author"));
+			if (json.has("ProductID"))
+				m_ProductID = json.getString("ProductID");
+			if(json.has("Name"))
+				m_ProductName = json.getString("Name");
+				
 		} catch (Exception e) {
-			System.out.print('x');
+			System.out.print("");
 		}
 	}
 	
