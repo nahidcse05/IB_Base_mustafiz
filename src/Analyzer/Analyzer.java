@@ -2,12 +2,12 @@ package Analyzer;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
 
@@ -24,6 +24,7 @@ public abstract class Analyzer {
 	protected int m_classNo; //This variable is just used to init stat for every feature. How to generalize it?
 	int[] m_classMemberNo; //Store the number of members in a class.
 	protected int m_Ngram; 
+	private int new_egg[][][];
 	
 	protected ArrayList<String> m_featureNames; //ArrayList for features
 	protected HashMap<String, Integer> m_featureNameIndex;//key: content of the feature; value: the index of the feature
@@ -43,6 +44,7 @@ public abstract class Analyzer {
 		m_featureNameIndex = new HashMap<String, Integer>();//key: content of the feature; value: the index of the feature
 		m_featureStat = new HashMap<String, _stat>();
 		m_preDocs = new LinkedList<_Doc>();
+		
 	}	
 	
 	public void reset() {
@@ -54,18 +56,22 @@ public abstract class Analyzer {
 	}
 	
 	//Load all the files in the directory.
-	public void LoadDirectory(String folder, String suffix) throws IOException {
+	public void LoadDirectory(String folder, String suffix, int from, int section) throws IOException {
 		File dir = new File(folder);
 		for (File f : dir.listFiles()) {
 			if (f.isFile() && f.getName().endsWith(suffix)) {
-				LoadDoc(f.getAbsolutePath());
+				if(from == 1)
+					LoadDocNewEgg(f.getAbsolutePath(),section);
+				if(from == 2)
+					LoadDocAmazon(f.getAbsolutePath());
 			} else if (f.isDirectory())
-				LoadDirectory(f.getAbsolutePath(), suffix);
+				LoadDirectory(f.getAbsolutePath(), suffix, from, section);
 		}
 		System.out.println();
 	}
 	
-	abstract public void LoadDoc(String filename);
+	abstract public void LoadDocNewEgg(String filename, int section);
+	abstract public void LoadDocAmazon(String filename);
 	
 	//Save all the features and feature stat into a file.
 	protected void SaveCVStat(String finalLocation) throws FileNotFoundException{
@@ -111,7 +117,7 @@ public abstract class Analyzer {
 		ArrayList<_Doc> docs = m_corpus.getCollection(); // Get the collection of all the documents.
 		int N = docs.size();
 		if (fValue.equals("TF")){
-			//
+			//the original feature is raw TF
 		} else if (fValue.equals("TFIDF")) {
 			for (int i = 0; i < docs.size(); i++) {
 				_Doc temp = docs.get(i);
@@ -172,6 +178,9 @@ public abstract class Analyzer {
 			//The default value is just keeping the raw count of every feature.
 			System.out.println("No feature value is set, keep the raw count of every feature.");
 		}
+		
+		//rank the documents by product and time in all the cases
+		Collections.sort(m_corpus.getCollection());
 		if (norm == 1){
 			for(_Doc d:docs)			
 				Utils.L1Normalization(d.getSparse());
@@ -182,6 +191,7 @@ public abstract class Analyzer {
 			System.out.println("No normalizaiton is adopted here or wrong parameters!!");
 		}
 		
+		System.out.format("Text feature generated for %d documents...\n", m_corpus.getSize());
 	}
 	
 	//Select the features and store them in a file.
@@ -212,7 +222,7 @@ public abstract class Analyzer {
 		PrintWriter writer = new PrintWriter(new File(featureLocation));
 		//print out the configurations as comments
 		writer.format("#NGram:%d\n", m_Ngram);
-		writer.format("#Selection:%s\n", featureLocation);
+		writer.format("#Selection:%s\n", featureSelection);
 		writer.format("#Start:%f\n", startProb);
 		writer.format("#End:%f\n", endProb);
 		writer.format("#DF_Cut:%d\n", threshold);
@@ -229,41 +239,50 @@ public abstract class Analyzer {
 	}
 	
 	//Sort the documents.
-	public void setTimeFeatures(int window){
-		if (window<1) return;
+	public void setTimeFeatures(int window){//must be called before return corpus
+		if (window<1) 
+			return;
 		
 		//Sort the documents according to time stamps.
 		ArrayList<_Doc> docs = m_corpus.getCollection();
 		
-		Collections.sort(docs, new Comparator<_Doc>(){
-			public int compare(_Doc d1, _Doc d2){
-				if(d1.getTimeStamp() == d2.getTimeStamp())
-					return 0;
-				return d1.getTimeStamp() < d2.getTimeStamp() ? -1 : 1;
-			}
-		});		
-		
 		/************************time series analysis***************************/
-		double norm = 1.0 / m_classMemberNo.length;
+		double norm = 1.0 / m_classMemberNo.length, avg = 0;
+		int count = 0;//for computing the moving average
+		String lastItemID = null;
 		for(int i = 0; i < docs.size(); i++){
-			_Doc doc = docs.get(i);
+			_Doc doc = docs.get(i);			
+			
+			if (lastItemID == null)
+				lastItemID = doc.getItemID();
+			else if (lastItemID != doc.getItemID()) {
+				m_preDocs.clear(); // reviews for a new category of products
+				lastItemID = doc.getItemID();
+				
+				//clear for moving average
+				avg = 0;
+				count = 0;
+			}
+			
+			avg += doc.getYLabel();
+			count += 1;
+			
 			if(m_preDocs.size() < window){
 				m_preDocs.add(doc);
 				m_corpus.removeDoc(i);
 				m_classMemberNo[doc.getYLabel()]--;
 				i--;
-			}
-			else{
-				doc.createSpVctWithTime(m_preDocs, m_featureNames.size(), norm);
+			} else{
+				doc.createSpVctWithTime(m_preDocs, m_featureNames.size(), avg/count, norm);
 				m_preDocs.remove();
 				m_preDocs.add(doc);
 			}
 		}
-		System.out.println("Time-series feature set!");
+		System.out.format("Time-series feature set for %d documents!\n", m_corpus.getSize());
 	}
 	
 	// added by Md. Mustafizur Rahman for Topic Modelling
-	public double[] get_back_ground_probabilty()
+	public double[] getBackgroundProb()
 	{
 		double back_ground_probabilty [] = new double [m_featureNameIndex.size()];
 		
@@ -278,5 +297,133 @@ public abstract class Analyzer {
 		for(int i = 0; i<m_featureNameIndex.size();i++)
 			back_ground_probabilty[i] = (1.0 + back_ground_probabilty[i]) / sum;
 		return back_ground_probabilty;
-	}	
+	}
+	
+	public int[][][] calculate_PP(String fileName)
+	{
+		new_egg = new int[m_featureNames.size()][m_featureNames.size()][3];
+		
+		for(int i = 0; i<m_corpus.getSize(); i++)
+		{
+			_SparseFeature[] sparse = m_corpus.getCollection().get(i).getSparse();
+			int pos_index [] = new int[sparse.length]; 
+		    int pos_index_lenght = 0;
+			
+			int neg_index [] = new int[sparse.length]; 
+			int neg_index_lenght = 0;
+			
+
+			for(int j=0; j<sparse.length;j++)
+			{
+				pos_index[j] = -1;
+				neg_index[j] = -1;
+			}
+			
+			
+			
+			for(int j=0; j<sparse.length;j++)
+			{
+				if(sparse[j].getposLabel()==1){	
+					pos_index[pos_index_lenght] = sparse[j].getIndex();
+					pos_index_lenght++;
+				}
+				
+				if(sparse[j].getnegLabel()==1){	
+					neg_index[neg_index_lenght] = sparse[j].getIndex();
+					neg_index_lenght++;
+				}
+			}
+			
+			
+			//Arrays.sort(pos_index);
+	/*		for(int j=0; j<pos_index_lenght; j++)
+			{
+					
+				int row = pos_index[j];
+				System.out.print(row+" ");
+			}
+			
+			System.out.println("Finish");*/
+			
+			
+			
+			for(int j=0; j<pos_index_lenght; j++)
+			{
+					
+				int row = pos_index[j];
+				
+				for(int k = j+1; k<pos_index_lenght; k++)
+					{
+						    int col = pos_index[k];
+							new_egg[row][col][0] = new_egg[row][col][0]+1;
+					}
+			}
+			
+			
+			//Arrays.sort(neg_index);
+/*			
+			for(int j=0; j<neg_index_lenght; j++)
+			{
+					
+				int row = neg_index[j];
+				System.out.print(row+" ");
+			}
+			
+			System.out.println("Neg Finish");*/
+			
+			for(int j=0; j<neg_index_lenght; j++)
+			{
+					
+				int row = neg_index[j];
+				for(int k = j+1; k<neg_index_lenght; k++)
+					{
+						    int col = neg_index[k];
+							new_egg[row][col][1] = new_egg[row][col][1]+1;
+					}
+			}
+			
+			
+			for(int j=0; j<pos_index_lenght; j++)
+			{
+					
+				int row = pos_index[j];
+				for(int k = 0; k<neg_index_lenght; k++)
+					{
+						    int col = neg_index[k];
+						    if(row!=col)
+						    	new_egg[row][col][2] = new_egg[row][col][2]+1;
+					}
+			}
+			
+			
+		}
+		
+		try {
+			FileWriter writer = new FileWriter(fileName);
+		
+		for(int k = 0; k<m_featureNames.size(); k++)
+			{
+				for(int l = k + 1; l<m_featureNames.size(); l++)
+					{
+					if(new_egg[k][l][0]+new_egg[k][l][1]+new_egg[k][l][2] >30){
+						
+						if(m_featureNames.get(k).equalsIgnoreCase("nt") ||  m_featureNames.get(k).equalsIgnoreCase("NUM") || m_featureNames.get(l).equalsIgnoreCase("nt") ||  m_featureNames.get(l).equalsIgnoreCase("NUM"))
+							continue;
+							
+								double ratio  = (double) new_egg[k][l][2] / (new_egg[k][l][0]+new_egg[k][l][1]);
+								writer.append(m_featureNames.get(k)+","+m_featureNames.get(l)+","+new_egg[k][l][0]+","+new_egg[k][l][1]+","+new_egg[k][l][2]+","+ratio+"\n");
+							
+					}
+						//System.out.println("["+m_featureNames.get(k)+"]"+"["+m_featureNames.get(l)+"]:"+new_egg[k][l][0]+" "+new_egg[k][l][1]+" "+new_egg[k][l][2]);
+					}
+			}
+		} catch (IOException e) {
+			
+		} 
+			
+		
+		
+		return new_egg;
+	}
+	
 }

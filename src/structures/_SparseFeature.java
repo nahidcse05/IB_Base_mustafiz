@@ -11,7 +11,12 @@ public class _SparseFeature implements Comparable<_SparseFeature> {
 	private String content; //Content of the feature.
 	private int m_index; // Index of the feature
 	private double m_value; // Value of the feature (non-zero)
-	//private double m_norm_value; //Normalized value of the feature.
+	private int m_poslabel; 
+	private int m_neglabel; 
+	public int poscount = 0;
+	public int negcount = 0;
+	public int topic = -1;
+	
 	
 	//Constructor.
 	public _SparseFeature(){
@@ -33,6 +38,19 @@ public class _SparseFeature implements Comparable<_SparseFeature> {
 		this.content = "";
 		this.m_index = index;
 		this.m_value = value;
+		this.m_poslabel = -1;
+		this.m_neglabel = -1;
+		//this.m_norm_value = 0;
+	}
+	
+	public _SparseFeature(int index, double value, int poslabel, int neglabel, int poscount, int negcount){
+		this.content = "";
+		this.m_index = index;
+		this.m_value = value;
+		this.m_poslabel = poslabel;
+		this.m_neglabel = neglabel;
+		this.poscount = poscount;
+		this.negcount = negcount;
 		//this.m_norm_value = 0;
 	}
 	
@@ -40,6 +58,17 @@ public class _SparseFeature implements Comparable<_SparseFeature> {
 	public String getContent(){
 		return this.content;
 	}
+	
+	public int getposLabel()
+	{
+		return this.m_poslabel;
+	}
+	
+	public int getnegLabel()
+	{
+		return this.m_neglabel;
+	}
+	
 	
 	public String setContent(String content){
 		this.content = content;
@@ -67,17 +96,6 @@ public class _SparseFeature implements Comparable<_SparseFeature> {
 		this.m_value = value;
 		return this.m_value;
 	}	
-	
-//	//Get the normalized value for the feature.
-//	public double getNormValue(){
-//		return this.m_norm_value;
-//	}
-//	
-//	//Set the normalized value for the feature.
-//	public double setNormValue(double normValue){
-//		this.m_norm_value = normValue;
-//		return this.m_norm_value;
-//	}
 
 	@Override
 	public int compareTo(_SparseFeature sfv) {

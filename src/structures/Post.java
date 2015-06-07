@@ -3,6 +3,7 @@
  */
 package structures;
 
+import utils.Utils;
 import json.JSONException;
 import json.JSONObject;
 
@@ -19,18 +20,6 @@ public class Post {
 		return m_ID;
 	}
 
-	//unique ProductID from the corresponding website
-	String m_ProductID;
-	public String getProductID() {
-			return m_ProductID;
-		}
-
-	//ProductName from the corresponding website
-		String m_ProductName;
-		public String getProductName() {
-				return m_ProductName;
-			}
-	
 	//author's displayed name
 	String m_author;
 	public String getAuthor() {
@@ -65,8 +54,9 @@ public class Post {
 		return m_content;
 	}
 	public void setContent(String content) {
-		if (!content.isEmpty())
-			this.m_content = content;
+		if (!content.isEmpty()) {
+			this.m_content = Utils.cleanHTML(content);
+		}
 	}
 
 	//timestamp of the post
@@ -109,37 +99,32 @@ public class Post {
 	public Post(String ID) {
 		m_ID = ID;
 	}
+	
 	//Constructor.
-	public Post(JSONObject json) throws NumberFormatException {
-		try {
+	public Post(JSONObject json) {
+		try {//special treatment for the overall ratings
 			if (json.has("Overall")){
-				if(json.getString("Overall").equals("None")){
+				if(json.getString("Overall").equals("None")) {
 					System.out.print('R');
+					setLabel(-1);
 				} else{
-					double label = Double.parseDouble(json.getString("Overall"));
-					if(label <= 0 && label > 5){
-						System.out.print('L');
-					} else setLabel((int)label);
+					double label = json.getDouble("Overall");
+					if(label <= 0)
+						setLabel(1);
+					else if (label>5)
+						setLabel(5);
+					else 
+						setLabel((int)label);
 				}
 			}
-			if (json.has("Date"))
-				setDate(json.getString("Date"));
-			if (json.has("Content"))
-				setContent(json.getString("Content"));
-			if (json.has("Title")) 
-				setTitle(json.getString("Title"));
-			if (json.has("ReviewID"))
-				m_ID = json.getString("ReviewID");
-			if (json.has("Author"))
-				setAuthor(json.getString("Author"));
-			if (json.has("ProductID"))
-				m_ProductID = json.getString("ProductID");
-			if(json.has("Name"))
-				m_ProductName = json.getString("Name");
-				
 		} catch (Exception e) {
-			System.out.print("");
 		}
+		
+		setDate(Utils.getJSONValue(json, "Date"));
+		setContent(Utils.getJSONValue(json, "Content"));
+		setTitle(Utils.getJSONValue(json, "Title"));
+		m_ID = Utils.getJSONValue(json, "ReviewID");
+		setAuthor(Utils.getJSONValue(json, "Author"));
 	}
 	
 	public JSONObject getJSON() throws JSONException {

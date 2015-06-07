@@ -19,10 +19,14 @@ public class Parameter {
 	public int m_CVFold = 10; //k fold-cross validation
 	
 	//"NB", "LR", "SVM"
-	public String m_classifier = "NB"; //Which classifier to use.
+	//"2topic", "pLSA", "HTMM", "LRHTMM"
+	public String m_model = "NB"; //Which model to use.
 	
-	//"SUP", "TRANS"
-	public String m_style = "TRANS";
+	//"PR"
+	public String m_weightScheme = "NONE"; // weather we will use computed weighting
+	
+	//"SUP", "TRANS", "TM"
+	public String m_style = "SUP";
 	public double m_sampleRate = 0.1; // sampling rate for transductive learning
 	public int m_kUL = 100; // k nearest labeled neighbors
 	public int m_kUU = 50; // k' nearest unlabeled neighbors
@@ -31,6 +35,7 @@ public class Parameter {
 	public String m_folder = null;
 	public String m_suffix = ".json";
 	public String m_tokenModel = "./data/Model/en-token.bin"; //Token model.
+	public String m_stnModel = "./data/Model/en-sent.bin"; //Sentence model.
 	public String m_stopwords = "./data/Model/stopwords.dat";
 	public String m_featureFile= null;//list of controlled vocabulary
 	public String m_featureStat= "./data/Features/fv_stat.dat";//detailed statistics of the selected features
@@ -43,6 +48,17 @@ public class Parameter {
 	
 	/*****Parameters in time series analysis.*****/
 	public int m_window = 0; // window size in time series analysis
+	
+	/*****Parameters specified for classifiers.*****/
+	public double m_C = 0.1; // trade-off parameter in LR and SVM
+	
+	/*****Parameters specified for classifiers.*****/
+	public int m_numTopics = 50; // number of topics
+	public double m_alpha = 1.05; // dirichlet prior for p(z|d)
+	public double m_beta = 1.01; // dirichlet prior for p(w|z)
+	public double m_lambda = 0.8; // p(B) in pLSA and 2topic model, L2 regularization in LRHTMM
+	public double m_converge = 1e-4; // EM convergency
+	public int m_maxmIterations = 200; // maximum number of iterations
 	
 	public Parameter(String argv[])
 	{
@@ -84,10 +100,14 @@ public class Parameter {
 			else if (argv[i-1].equals("-cv"))
 				m_CVFold = Integer.valueOf(argv[i]);
 			else if (argv[i-1].equals("-c"))
-				m_classifier = argv[i];
+				m_model = argv[i];
+			else if (argv[i-1].equals("-C"))
+				m_C = Double.valueOf(argv[i]);
+			else if (argv[i-1].equals("-w"))
+				m_weightScheme = argv[i];
 			else if (argv[i-1].equals("-s"))
 				m_style = argv[i];
-			else if (argv[i-1].equals("-w"))
+			else if (argv[i-1].equals("-window"))
 				m_window = Integer.valueOf(argv[i]);
 			else if (argv[i-1].equals("-sr"))
 				m_sampleRate = Double.valueOf(argv[i]);
@@ -95,6 +115,18 @@ public class Parameter {
 				m_kUL = Integer.valueOf(argv[i]);
 			else if (argv[i-1].equals("-kUU"))
 				m_kUU = Integer.valueOf(argv[i]);
+			else if (argv[i-1].equals("-k"))
+				m_numTopics = Integer.valueOf(argv[i]);
+			else if (argv[i-1].equals("-alpha"))
+				m_alpha = Double.valueOf(argv[i]);
+			else if (argv[i-1].equals("-beta"))
+				m_beta = Double.valueOf(argv[i]);
+			else if (argv[i-1].equals("-lambda"))
+				m_lambda = Double.valueOf(argv[i]);
+			else if (argv[i-1].equals("-iter"))
+				m_maxmIterations = Integer.valueOf(argv[i]);
+			else if (argv[i-1].equals("-con"))
+				m_converge = Double.valueOf(argv[i]);
 			else
 				exit_with_help();
 		}
@@ -124,19 +156,20 @@ public class Parameter {
 		+"	CHI -- Chi-Square test statistics\n"
 		+"	IG -- Informatoin gain\n"
 		+"	MI -- Mutual information\n"
-		+"-sp proportion : ignore the bottom proportion of ranked features (default 0.4)\n"
-		+"-ep proportion : ignore the top proportion of ranked features (default 0.999)\n"
-		+"-df c : ignore the documents occurring less than c documents (default 10) \n"
-		+"-cs c : total number of classes (has to be manually specified!)\n"
-		+"-ngram n : n-gram for feature generation (default 2)\n"
-		+"-lcut c : ignore the documents with length less than c (default 5)\n"
-		+"-window s : window size in time series based sentiment analysis (default 0)\n"
+		+"-sp float : ignore the bottom proportion of ranked features (default 0.4)\n"
+		+"-ep float : ignore the top proportion of ranked features (default 0.999)\n"
+		+"-df int : ignore the features occurring less than c documents (default 10) \n"
+		+"-cs int : total number of classes (has to be manually specified!)\n"
+		+"-ngram int : n-gram for feature generation (default 2)\n"
+		+"-lcut int : ignore the documents with length less than c (default 5)\n"
+		+"-window int : window size in time series based sentiment analysis (default 0)\n"
+		+"-cv int : cross validation fold (default 10)\n"
 		+"-fv type : feature value generation method (default TFIDF)\n"
 		+"	TF -- Term frequency\n"
 		+"	TFIDF -- Term frequency times inverse document frequence\n"
 		+"	BM25 -- Term frequency times BM25 IDF with document length normalization\n"
 		+"	PLN -- Pivoted length normalization\n"
-		+"-norm type : feature value normalization method (default L2)\n"
+		+"-norm int : feature value normalization method (default L2)\n"
 		+"	1 -- L1 normalization\n"
 		+"	2 -- L2 normalization\n"
 		+"	0 -- No normalization\n"
@@ -144,12 +177,26 @@ public class Parameter {
 		+"	NB -- Naive Bayes\n"
 		+"	LR -- Logistic Regression\n"
 		+"	SVM -- Support Vector Machine (libSVM)\n"
+		+"	2topic -- Two-Topic Topic Model\n"
+		+"	pLSA -- Probabilistic Latent Semantic Analysis\n"
+		+"	HTMM -- Hidden Topic Markov Model\n"
+		+"	LRHTMM -- MaxEnt Hidden Topic Markov Model\n"
+		+"-w type : instance weighting scheme (default None)\n"
+		+"	PR -- Content similarity based PageRank\n"
 		+"-s type : learning paradigm (default SUP)\n"
 		+"	SUP -- Supervised learning\n"
 		+"	TRANS -- Transductive learning\n"
-		+"-sr r : Sample rate for transductive learning (default 0.1)\n"
-		+"-kUL c : k nearest labeled neighbors (default 100)\n"
-		+"-kUU c : kP nearest unlabeled neighbors (default 50)\n"
+		+"	TM -- Topic Models\n"
+		+"-C float -- trade-off parameter in LR and SVM (default 0.1)\n"
+		+"-sr float : Sample rate for transductive learning (default 0.1)\n"
+		+"-kUL int : k nearest labeled neighbors (default 100)\n"
+		+"-kUU int : kP nearest unlabeled neighbors (default 50)\n"
+		+"-k int : number of topics (default 50)\n"
+		+"-alpha float : dirichlet prior for p(z|d) (default 1.05)\n"
+		+"-beta float : dirichlet prior for p(w|z) (default 1.01)\n"
+		+"-lambda float : manual background proportion setting p(B) (default 0.8)\n"
+		+"-iter int : maximum number of EM iteration (default 200)\n"
+		+"-con float : convergency limit (default 1e-4)\n"
 		);
 		System.exit(1);
 	}
@@ -159,8 +206,24 @@ public class Parameter {
 		buffer.append("\n--------------------------------------------------------------------------------------");
 		buffer.append("\nParameters of learning procedure:");
 		buffer.append("\n#Class: " + m_classNumber + "\tNgram: " + m_Ngram + "\tFeature value: " + m_featureValue + "\tNormalization: " + m_norm);
-		buffer.append("\nLearing method: " + m_style + "\tClassifier: " + m_classifier + "\tCross validation: " + m_CVFold);
 		buffer.append("\nDoc length cut: " + m_lengthThreshold +"\tWindow length: " + m_window);
+		
+		if (m_style.equals("TM")) {
+			buffer.append("\nTopic Model: " + m_model + "\t#Topics: " + m_numTopics + "\tCross validation: " + m_CVFold);
+			buffer.append("\nalpha: " + m_alpha + "\tbeta: " + m_beta + "\tlambda: " + m_lambda + "\t#Iterations: " + m_maxmIterations + "\tConvergency: " + m_converge);
+		} else {
+			if (m_style.equals("TRANS"))
+				buffer.append("\nLearning paradigm: TRANS\tSampling rate:" + m_sampleRate + "\tkUL: " + m_kUL + "\tkUU: " + m_kUU);
+			else
+				buffer.append("\nLearning paradigm: SUP");
+			
+			if (m_model.equals("LR") || m_model.equals("SVM"))
+				buffer.append("\nClassifier: " + m_model + "\tInstance weighting: " + m_weightScheme + "\tTrade-off Parameter: " + m_C+ "\tCross validation: " + m_CVFold);
+			else
+				buffer.append("\nClassifier: " + m_model + "\tInstance weighting: " + m_weightScheme + "\tCross validation: " + m_CVFold);
+
+		}
+		
 		buffer.append("\nData directory: " + m_folder);
 		buffer.append("\n--------------------------------------------------------------------------------------");
 		return buffer.toString();
@@ -168,7 +231,7 @@ public class Parameter {
 	
 	public String printFeatureSelectionConfiguration() {
 		StringBuffer buffer = new StringBuffer(512);
-		buffer.append("\n--------------------------------------------------------------------------------------");
+		buffer.append("--------------------------------------------------------------------------------------");
 		buffer.append("\nParameters of feature selection:");
 		buffer.append("\nSelection method: " + m_featureSelection + "\tDF cut: " + m_DFthreshold + "\tRange: [" + m_startProb + "," + m_endProb + "]");
 		buffer.append("\nFeature file: " + m_featureFile + "\tStatistics file: " + m_featureStat);

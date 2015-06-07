@@ -1,5 +1,9 @@
 package Classifier;
 
+import java.io.BufferedWriter;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -13,8 +17,8 @@ import LBFGS.LBFGS.ExceptionWithIflag;
 public class LogisticRegression extends BaseClassifier{
 
 	double[] m_beta;
-	double[] m_g;
-	double[] m_diag;
+	double[] m_g, m_diag;
+	double[] m_cache;
 	double m_lambda;
 	
 	public LogisticRegression(_Corpus c, int classNo, int featureSize){
@@ -22,6 +26,7 @@ public class LogisticRegression extends BaseClassifier{
 		m_beta = new double[classNo * (featureSize + 1)]; //Initialization.
 		m_g = new double[m_beta.length];
 		m_diag = new double[m_beta.length];
+		m_cache = new double[classNo];
 		m_lambda = 0.5;//Initialize it to be 0.5.
 	}
 	
@@ -30,7 +35,8 @@ public class LogisticRegression extends BaseClassifier{
 		m_beta = new double[classNo * (featureSize + 1)]; //Initialization.
 		m_g = new double[m_beta.length];
 		m_diag = new double[m_beta.length];
-		m_lambda = lambda;//Initialize it to be 0.5.
+		m_cache = new double[classNo];
+		m_lambda = lambda;
 	}
 	
 	@Override
@@ -41,6 +47,7 @@ public class LogisticRegression extends BaseClassifier{
 	@Override
 	protected void init() {
 		Arrays.fill(m_beta, 0);
+		Arrays.fill(m_diag, 0);
 	}
 
 	/*
@@ -60,7 +67,7 @@ public class LogisticRegression extends BaseClassifier{
 		try{
 			do {
 				fValue = calcFuncGradient(trainSet);
-				LBFGS.lbfgs(fSize, 6, m_beta, fValue, m_g, false, m_diag, iprint, 1e-5, 1e-16, iflag);
+				LBFGS.lbfgs(fSize, 6, m_beta, fValue, m_g, false, m_diag, iprint, 1e-4, 1e-20, iflag);
 			} while (iflag[0] != 0);
 		} catch (ExceptionWithIflag e){
 			e.printStackTrace();
@@ -97,18 +104,21 @@ public class LogisticRegression extends BaseClassifier{
 		//The computation complexity is n*classNo.
 		int Yi;
 		_SparseFeature[] fv;
+		double weight;
 		for (_Doc doc: trainSet) {
 			Yi = doc.getYLabel();
 			fv = doc.getSparse();
+			weight = doc.getWeight();
 			
 			for(int j = 0; j < m_classNo; j++){
 				logPij = calculatelogPij(j, fv);//logP(Y=yi|X=xi)
 				Pij = Math.exp(logPij);
 				if (Yi == j){
 					gValue = Pij - 1.0;
-					fValue += logPij;
+					fValue += logPij * weight;
 				} else
 					gValue = Pij;
+				gValue *= weight;//weight might be different for different documents
 				
 				int offset = j * (m_featureSize + 1);
 				m_g[offset] += gValue;
@@ -126,7 +136,71 @@ public class LogisticRegression extends BaseClassifier{
 	public int predict(_Doc doc) {
 		_SparseFeature[] fv = doc.getSparse();
 		for(int i = 0; i < m_classNo; i++)
-			m_cProbs[i] = calculatelogPij(i, fv);
-		return Utils.maxOfArrayIndex(m_cProbs);
+			m_cache[i] = Utils.dotProduct(m_beta, fv, i * (m_featureSize + 1));
+		return Utils.maxOfArrayIndex(m_cache);
+	}
+	
+	protected void debug(_Doc d) {
+		try {
+			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(m_debugOutput, true), "UTF-8"));
+			_SparseFeature[] fv = d.getSparse();
+			int fid, offset;
+			double fvalue;		
+			
+			writer.write(d.toString());
+			
+			writer.write("\nBIAS");
+			for(int k=0; k<m_classNo; k++) {
+				offset = k * (m_featureSize + 1);
+				writer.write(String.format("\t%.4f", m_beta[offset]));					
+			}
+			writer.write("\n");
+			
+			for(int i=0; i<fv.length; i++) {
+				fid = fv[i].getIndex();
+				if (fid>=m_corpus.getFeatureSize())
+					break; // beyond text feature range
+				fvalue = fv[i].getValue();				
+				
+				writer.write(m_corpus.getFeature(fid));
+				for(int k=0; k<m_classNo; k++) {
+					offset = k * (m_featureSize + 1) + fid + 1;
+					writer.write(String.format("\t%.4f", fvalue*m_beta[offset]));					
+				}
+				writer.write("\n");
+			}
+			
+			writer.write("Pred");
+			for(int k=0; k<m_classNo; k++) 
+				writer.write(String.format("\t%.4f", m_cache[k]));		
+			writer.write("\n\n");
+			writer.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	//Save the parameters for classification.
+	@Override
+	public void saveModel(String modelLocation){
+		try {
+			BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(modelLocation), "UTF-8"));
+			int offset, fSize = m_corpus.getFeatureSize();//does not include bias and time features
+			for(int i=0; i<fSize; i++) {
+				writer.write(m_corpus.getFeature(i));
+				
+				for(int k=0; k<m_classNo; k++) {
+					offset = 1 + i + k * (m_featureSize + 1);//skip bias
+					writer.write("\t" + m_beta[offset]);
+				}
+				writer.write("\n");
+			}
+			writer.close();
+			
+			System.out.format("%s is saved to %s\n", this.toString(), modelLocation);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
 	}
 }

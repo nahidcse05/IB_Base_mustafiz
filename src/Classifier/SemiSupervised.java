@@ -30,6 +30,8 @@ public class SemiSupervised extends BaseClassifier{
 	
 	protected BaseClassifier m_classifier; //Multiple learner.
 	
+	double m_discount = 0.5; // default similarity discount if across different products
+	
 	//Randomly pick 10% of all the training documents.
 	public SemiSupervised(_Corpus c, int classNumber, int featureSize, String classifier){
 		super(c, classNumber, featureSize);
@@ -37,7 +39,7 @@ public class SemiSupervised extends BaseClassifier{
 		m_labelRatio = 0.1;
 		m_alpha = 1.0;
 		m_beta = 0.1;
-		m_M = 100000;
+		m_M = 10000;
 		m_k = 100;
 		m_kPrime = 50;	
 		m_labeled = new ArrayList<_Doc>();
@@ -52,7 +54,7 @@ public class SemiSupervised extends BaseClassifier{
 		m_labelRatio = ratio;
 		m_alpha = 1.0;
 		m_beta = 0.1;
-		m_M = 100000;
+		m_M = 10000;
 		m_k = k;
 		m_kPrime = kPrime;	
 		m_labeled = new ArrayList<_Doc>();
@@ -131,14 +133,22 @@ public class SemiSupervised extends BaseClassifier{
 		initCache();
 		
 		/***pre-compute the full similarity matrix (except the diagonal).****/
+		_Doc di, dj;
 		for(int i = 0; i < m_U; i++){
+			di = m_testSet.get(i);
 			for(int j = i+1; j < m_U; j++){//to save computation since our similarity metric is symmetric
-				similarity = m_beta * Utils.calculateSimilarity(m_testSet.get(i), m_testSet.get(j));
+				dj = m_testSet.get(j);
+				similarity = Utils.calculateSimilarity(di, dj) * di.getWeight() * dj.getWeight();
+				if (!di.sameProduct(dj))
+					similarity *= m_discount;//differentiate reviews from different products
 				setCache(i, j, similarity);
 			}	
 
 			for(int j = 0; j < m_L; j++){
-				similarity = Utils.calculateSimilarity(m_testSet.get(i), m_labeled.get(j));
+				dj = m_labeled.get(j);
+				similarity = Utils.calculateSimilarity(di, dj) * di.getWeight() * dj.getWeight();
+				if (!di.sameProduct(m_labeled.get(j)))
+					similarity *= m_discount;//differentiate reviews from different products
 				setCache(i, m_U+j, similarity);
 			}
 		}
@@ -157,12 +167,13 @@ public class SemiSupervised extends BaseClassifier{
 			for(int j=0; j<m_U; j++) {
 				if (j==i)
 					continue;
+				
 				m_kUU.add(new _RankItem(j, getCache(i,j)));
 			}
 			
 			sum = 0;
 			for(_RankItem n:m_kUU) {
-				value = Math.max(n.m_value, mat.getQuick(i, n.m_index)/scale);//recover the original Wij
+				value = Math.max(m_beta*n.m_value, mat.getQuick(i, n.m_index)/scale);//recover the original Wij
 				mat.setQuick(i, n.m_index, scale * value);
 				mat.setQuick(n.m_index, i, scale * value);
 				sum += value;
@@ -170,7 +181,7 @@ public class SemiSupervised extends BaseClassifier{
 			m_kUU.clear();
 			
 			//Set the part of labeled and unlabeled nodes. L-U and U-L
-			for(int j=0; j<m_L; j++)
+			for(int j=0; j<m_L; j++) 
 				m_kUL.add(new _RankItem(m_U+j, getCache(i,m_U+j)));
 			
 			for(_RankItem n:m_kUL) {
@@ -219,7 +230,16 @@ public class SemiSupervised extends BaseClassifier{
 	}
 	
 	@Override
+	protected void debug(_Doc d){} // no easy way to debug
+	
+	@Override
 	public int predict(_Doc doc) {
 		return -1; //we don't support this
+	}
+	
+	//Save the parameters for classification.
+	@Override
+	public void saveModel(String modelLocation){
+		
 	}
 }
